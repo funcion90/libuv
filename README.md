@@ -215,6 +215,30 @@ master-acceptor + N worker + fd duplication + atomic stats + signal dump 는 라
 
 `Connection` 은 가벼운 wrapper (포인터 1개) — by value 전달 비용 무시 가능.
 
+### 벤치마크 라이브러리 (uvx::bench::Runner)
+
+서버 부하 측정도 같은 라이브러리에 포함됩니다. `uvx/bench/runner.hpp` 를 include 하면 어떤 TCP echo-style 서버에도 RTT/throughput 측정 가능:
+
+```cpp
+#include "uvx/bench/runner.hpp"
+#include "uvx/core/config.hpp"
+
+int main() {
+    uvx::config::Config cfg;
+    cfg.load_first_existing({"uvx.yaml"});
+
+    const auto bench_cfg = uvx::bench::load_config(cfg);  // yaml/env 자동 적용
+    uvx::bench::Runner runner(bench_cfg);
+    const auto result = runner.run();
+    result.print();                                        // 또는 직접 접근
+
+    // result.rps, result.rtt_avg_us, result.total_req 등 사용자 활용
+    return 0;
+}
+```
+
+`RunnerConfig` (host/port/conn_count/duration_sec/msg_size) 만 채우면 N 커넥션 동시 connect + 메시지 ping-pong + 통계 집계가 자동.
+
 ### YAML/환경변수 설정 (라이브러리가 자동 적용)
 
 `MultiReactor(cfg)` 생성 시 다음 항목 자동 적용:
