@@ -77,12 +77,33 @@ bool socket_to_transferable(uv_tcp_t* src, TransferableSocket* out) noexcept {
 #endif
 }
 
+#ifdef _WIN32
+// WSADuplicateSocket 으로 올린 underlying refcount 를 감소시키는 cleanup.
+// WSASocket 으로 변환 후 즉시 closesocket → refcount-- → underlying 해제.
+void cleanup_transferable(const TransferableSocket& t) noexcept {
+    const SOCKET s = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO,
+                                const_cast<WSAPROTOCOL_INFOW*>(&t.info),
+                                0, 0);
+    if (INVALID_SOCKET != s) {
+        closesocket(s);
+    }
+}
+#else
+void cleanup_transferable(const TransferableSocket& t) noexcept {
+    if (t.fd >= 0) {
+        ::close(t.fd);
+    }
+}
+#endif
+
 bool transferable_to_tcp(const TransferableSocket& t, uv_loop_t* loop, uv_tcp_t* out) noexcept {
 #ifdef _WIN32
     const SOCKET sock = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO,
                                    const_cast<WSAPROTOCOL_INFOW*>(&t.info),
                                    0, WSA_FLAG_OVERLAPPED);
     if (INVALID_SOCKET == sock) {
+        // WSASocket 실패 — WSADuplicateSocket 으로 올린 refcount 를 다른 방식으로 cleanup
+        cleanup_transferable(t);
         return false;
     }
     if (0 != uv_tcp_init(loop, out)) {
@@ -224,6 +245,22 @@ void on_handoff(uv_async_t* async) noexcept {
 void on_worker_shutdown(uv_async_t* async) noexcept {
     auto* worker = reinterpret_cast<WorkerContext*>(async->data);
     uvx::log::info("worker {} shutdown signal received", worker->worker_id);
+
+    // pending queue drain — master 가 dispatch 했지만 아직 처리 못 한 transferable 을 close.
+    // 이게 없으면 WSADuplicateSocket/dup 으로 올린 refcount 가 누수.
+    std::size_t drained = 0;
+    {
+        std::lock_guard<std::mutex> lk(worker->queue_mutex);
+        while (false == worker->pending.empty()) {
+            cleanup_transferable(worker->pending.front());
+            worker->pending.pop();
+            ++drained;
+        }
+    }
+    if (drained > 0) {
+        uvx::log::info("worker {} drained {} pending transferable(s)",
+                       worker->worker_id, drained);
+    }
 
     uv_walk(&worker->loop,
             +[](uv_handle_t* h, void*) noexcept {

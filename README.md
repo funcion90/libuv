@@ -25,6 +25,8 @@ RTT avg:      269.1 us  min: 17.8 us  max: 35.7 ms
 worker 분산:  8/8/7/7/7  (round-robin, healthcheck 포함)
 ```
 
+> 측정 환경: Windows 11 + Docker Desktop (WSL2 backend), Release 빌드, loopback 네트워크. 호스트 CPU/메모리에 따라 결과는 달라집니다.
+
 ## 요구 사항
 
 | 도구 | 버전 |
@@ -227,17 +229,6 @@ kill -USR1 $(pidof echo_server)
 - 콜백 `noexcept` 의무
 
 자세한 내용은 [.claude/rules/cpp-patterns.md](.claude/rules/cpp-patterns.md) 참고.
-
-## 확장 아이디어 (TODO)
-
-- p50/p95/p99 RTT histogram (현재 avg/min/max만)
-- AddressSanitizer/UBSan 빌드 옵션
-- Max connection limit (DoS 방어)
-- HTTP/1.1 minimal handler
-- IPv6 지원
-- TLS (BoringSSL wrapping)
-- Prometheus `/metrics` endpoint
-- K8s Deployment manifest
 
 ## 라이선스
 

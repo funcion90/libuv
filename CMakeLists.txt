@@ -26,9 +26,18 @@ add_library(uvx_common INTERFACE)
 target_include_directories(uvx_common INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(uvx_common INTERFACE uv_a)
 
+# 각 바이너리 빌드 후 config/uvx.yaml 을 출력 디렉토리에 복사하는 헬퍼.
+# add_custom_command(TARGET ...) 가 target 선언 dir 에서만 호출 가능하므로,
+# 각 subdirectory 의 CMakeLists.txt 에서 이 function 을 호출한다.
+function(uvx_copy_yaml tgt)
+    add_custom_command(TARGET ${tgt} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/config/uvx.yaml"
+            "$<TARGET_FILE_DIR:${tgt}>/uvx.yaml"
+        COMMENT "Copying uvx.yaml to $<TARGET_FILE_DIR:${tgt}>"
+    )
+endfunction()
+
 add_subdirectory(src/echo_server)
 add_subdirectory(src/echo_client)
 add_subdirectory(src/bench_client)
-
-# 참고: uvx.yaml POST_BUILD copy 는 각 바이너리의 CMakeLists.txt 에 정의됨
-# (add_custom_command(TARGET ...) 는 target 이 선언된 같은 디렉토리에서만 호출 가능)

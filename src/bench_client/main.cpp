@@ -223,6 +223,11 @@ void print_results(const BenchCtx& ctx) noexcept {
 
 // 호스트명을 IPv4 sockaddr 로 resolve. numeric IP 면 즉시 변환, 아니면 DNS lookup 수행.
 bool resolve_host(uv_loop_t* loop, const std::string& host, int port, sockaddr_in* out) noexcept {
+    if (port < 1 || port > 65535) {
+        uvx::log::error("invalid port {} (must be 1-65535)", port);
+        return false;
+    }
+
     // 1) numeric IP fast path
     if (0 == uv_ip4_addr(host.c_str(), port, out)) {
         return true;
