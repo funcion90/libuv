@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "common/config.hpp"
-#include "common/log.hpp"
-#include "common/uv_check.hpp"
+#include "uvx/core/config.hpp"
+#include "uvx/core/log.hpp"
+#include "uvx/core/uv_check.hpp"
 
 namespace {
 

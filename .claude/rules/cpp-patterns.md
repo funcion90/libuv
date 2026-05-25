@@ -54,12 +54,15 @@ paths:
 
 | 구분 | 규칙 | 예시 |
 |------|------|------|
-| private 멤버 | snake_case | `client_socket`, `buffer_size` |
+| private 멤버 (자유 함수 / struct) | snake_case | `client_socket`, `buffer_size` |
+| private 클래스 멤버 | snake_case + trailing `_` | `worker_count_`, `port_` |
 | public 멤버 | PascalCase | `ClientSocket`, `BufferSize` |
 | 입력 인자 | `in_` 접두사 | `in_loop`, `in_handle` |
 | 출력 인자 | `out_` 접두사 | `out_address`, `out_size` |
 | 로컬 변수 | 접두사 없음, snake_case | `peer`, `bind_addr` |
 | 상수 (constexpr/consteval) | snake_case 함수 또는 `kPascalCase` | `kPort()`, `kBacklog()` |
+
+**trailing `_` 사용 시점**: 클래스 멤버를 로컬 변수와 혼동 없이 구분하기 위함. 예: 생성자 인자 `int port` 와 멤버 `port_`. struct 의 public-like 멤버나 자유 함수의 상태 변수에는 적용 안 함.
 | 매크로 | UPPER_SNAKE_CASE | `UNUSED(x)` (가능하면 매크로 회피) |
 
 **근거**: libuv 콜백 시그니처(`uv_handle_t* handle`)와 자연스럽게 어울리도록 인자에 `in_`/`out_` 접두사 강제.

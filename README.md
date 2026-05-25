@@ -42,21 +42,26 @@ worker 분산:  8/8/7/7/7  (round-robin, healthcheck 포함)
 libuv/
 ├── CMakeLists.txt
 ├── cmake/
-│   └── FetchLibuv.cmake          # libuv v1.52.1 다운로드
+│   └── FetchLibuv.cmake               # libuv v1.52.1 다운로드
 ├── config/
-│   └── uvx.yaml                  # 모든 설정 한 곳
+│   └── uvx.yaml                       # 모든 설정 한 곳
 ├── src/
-│   ├── common/                   # 공용 헤더 (uvx_common INTERFACE)
-│   │   ├── config.hpp            # YAML 파서 + env_or_cfg_* 헬퍼
-│   │   ├── log.hpp               # std::format 로깅
-│   │   └── uv_check.hpp          # 에러 체크 + UvCallable concept
-│   ├── echo_server/main.cpp      # 5-reactor echo 서버
-│   ├── echo_client/main.cpp      # stdin / multi-conn 모드
-│   └── bench_client/main.cpp     # RTT/throughput 벤치
-├── Dockerfile                    # Multi-stage build (~80MB image)
-├── docker-compose.yml            # echo_server + bench_client (profile)
-├── .claude/rules/                # C++ / MD 코딩 규약 (학습 자료)
-└── build/                        # CMake 산출물 (gitignored)
+│   ├── uvx/                           # ★ 재사용 가능 라이브러리 (헤더-온리)
+│   │   ├── core/
+│   │   │   ├── config.hpp             #   YAML 파서 + env_or_cfg_* 헬퍼
+│   │   │   ├── log.hpp                #   std::format 로깅
+│   │   │   └── uv_check.hpp           #   에러 체크 + UvCallable concept
+│   │   └── net/
+│   │       ├── transferable_socket.hpp #  fd duplication (Win/Linux 분기)
+│   │       ├── connection.hpp         #   Connection wrapper (send/close)
+│   │       └── multi_reactor.hpp      #   Master + N Worker framework
+│   ├── echo_server/main.cpp           # uvx 사용 예제 (35줄)
+│   ├── echo_client/main.cpp           # stdin / multi-conn 모드
+│   └── bench_client/main.cpp          # RTT/throughput 벤치
+├── Dockerfile                         # Multi-stage build (~80MB image)
+├── docker-compose.yml                 # echo_server + bench_client (profile)
+├── .claude/rules/                     # C++ / MD 코딩 규약 (학습 자료)
+└── build/                             # CMake 산출물 (gitignored)
 ```
 
 ## 빠른 시작 (Docker)
@@ -103,7 +108,7 @@ cmake --build build --parallel
 
 첫 빌드 시 `build/_deps/libuv-src/` 에 libuv v1.52.1이 shallow clone으로 다운로드됩니다.
 
-## 실행
+## 사용법 (바이너리 실행)
 
 ### Echo 서버 + 단일 클라이언트 (stdin 모드)
 
@@ -139,6 +144,87 @@ ECHO_CLIENT_CONNS=16 ./echo_client
 # 또는 환경변수 override
 BENCH_CONNS=64 BENCH_DURATION_SEC=30 ./bench_client
 ```
+
+## 라이브러리로 사용 (uvx)
+
+이 sandbox 의 `src/uvx/` 는 **헤더-온리 라이브러리**로, 다른 프로젝트에서 그대로 가져다 쓸 수 있습니다.
+echo_server / echo_client / bench_client 는 모두 이 라이브러리의 사용 예제입니다.
+
+### 다른 프로젝트에 통합
+
+```bash
+# Option 1: git submodule
+git submodule add https://github.com/funcion90/libuv.git libs/libuv-sandbox
+
+# Option 2: 수동 복사
+cp -r /path/to/libuv-sandbox/src/uvx my-project/libs/uvx
+```
+
+```cmake
+# 내 프로젝트의 CMakeLists.txt
+add_subdirectory(libs/libuv-sandbox)
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE uvx_common)
+```
+
+`uvx_common` INTERFACE 타겟은 libuv 본체(`uv_a`) + `src/uvx/` include 경로를 함께 노출합니다.
+
+### 최소 예제 — 35줄 echo 서버
+
+```cpp
+#include "uvx/core/config.hpp"
+#include "uvx/core/log.hpp"
+#include "uvx/net/multi_reactor.hpp"
+
+int main() {
+    uvx::config::Config cfg;
+    cfg.load_first_existing({"uvx.yaml", "config/uvx.yaml"});
+
+    uvx::net::MultiReactor reactor(cfg);
+
+    uvx::net::ConnectionCallbacks cbs;
+    cbs.on_data = [](uvx::net::Connection c, std::string_view data) {
+        c.send(data);  // echo back
+    };
+    reactor.set_callbacks(std::move(cbs));
+
+    return reactor.run();   // SIGINT 받을 때까지 blocking
+}
+```
+
+다른 프로토콜(HTTP/WebSocket 등) 구현 시 `on_data` 람다 안에서 파싱/핸들링만 바꾸면 됩니다.
+master-acceptor + N worker + fd duplication + atomic stats + signal dump 는 라이브러리가 모두 처리.
+
+### ConnectionCallbacks API
+
+| 콜백 | 시그니처 | 호출 시점 |
+|------|---------|----------|
+| `on_accept` | `void(Connection)` | accept 직후 (per-connection 초기화용) |
+| `on_data` | `void(Connection, std::string_view)` | 데이터 수신 |
+| `on_disconnect` | `void(Connection)` | 연결 종료 직전 (cleanup용) |
+
+모두 optional `std::function`. 필요한 것만 설정. 미설정 시 무시.
+
+### Connection 클래스
+
+| 메서드 | 동작 |
+|--------|------|
+| `bool send(std::string_view data)` | 비동기 전송 (라이브러리가 메모리 자동 cleanup) |
+| `void close()` | 연결 종료 (on_disconnect 콜백 트리거) |
+| `uv_tcp_t* raw_handle()` | 저수준 접근 (per-conn state 직접 관리 등) |
+
+`Connection` 은 가벼운 wrapper (포인터 1개) — by value 전달 비용 무시 가능.
+
+### YAML/환경변수 설정 (라이브러리가 자동 적용)
+
+`MultiReactor(cfg)` 생성 시 다음 항목 자동 적용:
+
+| YAML key | 환경변수 | 기본값 |
+|----------|---------|--------|
+| `server.worker_count` | `ECHO_WORKER_COUNT` | `hardware_concurrency - 1` |
+| `server.port` | `ECHO_PORT` | `7000` |
+| `server.backlog` | `ECHO_BACKLOG` | `128` |
+| `server.stats_interval_ms` | `ECHO_STATS_INTERVAL_MS` | `5000` |
 
 ## 설정 (config/uvx.yaml)
 
