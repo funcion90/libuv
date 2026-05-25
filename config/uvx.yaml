@@ -1,0 +1,33 @@
+# libuv echo sandbox configuration
+#
+# 우선순위: 환경변수 > yaml > 코드 default
+# 빈 값 또는 주석 처리 시 default 사용
+
+server:
+  # 0.0.0.0 에서 listen 할 포트
+  port: 7000
+  # listen() backlog
+  backlog: 128
+  # reactor 개수. 0 또는 미지정 시 hardware_concurrency - 1
+  worker_count: 5
+  # 통계 자동 dump 주기 (ms). 0 = 비활성
+  stats_interval_ms: 5000
+
+client:
+  # echo_client 가 connect 할 대상
+  host: 127.0.0.1
+  port: 7000
+  # 0  = stdin 모드 (기본 동작, Enter 마다 echo)
+  # N>0 = N개 동시 connection 으로 ping-pong (분산 확인용)
+  conns: 0
+
+bench:
+  # bench_client 대상 서버
+  host: 127.0.0.1
+  port: 7000
+  # 동시 connection 수
+  conns: 16
+  # 측정 시간 (sec)
+  duration_sec: 10
+  # 한 번에 보낼 echo 메시지 크기 (bytes)
+  msg_size: 64

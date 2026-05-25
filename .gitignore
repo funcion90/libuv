@@ -1,0 +1,57 @@
+# Build 산출물
+build/
+out/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+.cache/
+
+# Visual Studio 사용자 설정
+*.user
+*.suo
+*.aps
+*.pch
+*.ilk
+*.pdb
+
+# 컴파일 산출물
+*.exe
+*.obj
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+
+# CMake
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+
+# Claude — 개인 plan / 메모리 (학습 규약 .claude/rules/ 만 공개)
+.claude/plans/
+.claude/memory/
+.claude/agents/
+.claude/skills/
+.claude/CLAUDE.local.md
+.claude/settings.local.json
+
+# 로그 / 덤프
+*.log
+*.dmp
+core
+core.*
+
+# 임시
+tmp/
+temp/
+*.tmp
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

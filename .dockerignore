@@ -1,0 +1,31 @@
+# Build 산출물 / IDE / VCS 제외
+build/
+.vs/
+.vscode/
+*.user
+.git/
+.gitignore
+.gitattributes
+
+# Claude / plans (image 에 불필요)
+.claude/
+
+# Python cache
+**/__pycache__/
+**/*.pyc
+
+# CMake/MSVC 산출물
+**/CMakeFiles/
+**/*.suo
+**/*.sln
+**/*.vcxproj*
+**/CMakeCache.txt
+
+# 문서 (런타임 무관)
+*.md
+LICENSE
+
+# Docker 자체
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,54 @@
+# libuv sandbox docker-compose
+#
+# 사용법:
+#   docker compose up echo_server -d                          # 게임서버만
+#   docker compose --profile bench up bench_client            # 부하 테스트
+#   docker compose run --rm bench_client                      # 한 번 실행
+#   docker compose down                                       # 정리
+#
+# 환경변수 override:
+#   ECHO_WORKER_COUNT=8 docker compose up echo_server -d
+
+services:
+  # =====================================================================
+  #  게임서버 (echo)
+  # =====================================================================
+  echo_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: uvx_sandbox:latest
+    container_name: uvx_echo_server
+    command: ["./echo_server"]
+    ports:
+      - "7000:7000"
+    environment:
+      ECHO_WORKER_COUNT: "5"
+    volumes:
+      - ./config/uvx.yaml:/app/uvx.yaml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/tcp/127.0.0.1/7000 || exit 1'"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # =====================================================================
+  #  테스트서버 (bench) — profile=bench 로 명시 실행
+  # =====================================================================
+  bench_client:
+    image: uvx_sandbox:latest
+    container_name: uvx_bench_client
+    command: ["./bench_client"]
+    depends_on:
+      echo_server:
+        condition: service_started
+    environment:
+      BENCH_HOST: "echo_server"
+      BENCH_PORT: "7000"
+      BENCH_CONNS: "32"
+      BENCH_DURATION_SEC: "30"
+      BENCH_MSG_SIZE: "64"
+    profiles:
+      - bench
