@@ -52,20 +52,80 @@ paths:
 
 ## 변수 명명
 
+### 함수/블록 스코프
+
 | 구분 | 규칙 | 예시 |
 |------|------|------|
-| private 멤버 (자유 함수 / struct) | snake_case | `client_socket`, `buffer_size` |
-| private 클래스 멤버 | snake_case + trailing `_` | `worker_count_`, `port_` |
-| public 멤버 | PascalCase | `ClientSocket`, `BufferSize` |
-| 입력 인자 | `in_` 접두사 | `in_loop`, `in_handle` |
-| 출력 인자 | `out_` 접두사 | `out_address`, `out_size` |
-| 로컬 변수 | 접두사 없음, snake_case | `peer`, `bind_addr` |
-| 상수 (constexpr/consteval) | snake_case 함수 또는 `kPascalCase` | `kPort()`, `kBacklog()` |
+| 지역 변수 (local) | snake_case, 접두사 없음 | `peer`, `bind_addr`, `rc` |
+| 함수 입력 인자 | `in_` 접두사 + snake_case | `in_loop`, `in_handle` |
+| 함수 출력 인자 | `out_` 접두사 + snake_case | `out_address`, `out_size` |
+| 함수 내 const/constexpr 값 | snake_case (지역 변수와 동일) | `const auto rc = uv_run(...);` |
+| function-local `static` | `s_` 접두사 + snake_case | `s_counter`, `s_shutdown_req` |
 
-**trailing `_` 사용 시점**: 클래스 멤버를 로컬 변수와 혼동 없이 구분하기 위함. 예: 생성자 인자 `int port` 와 멤버 `port_`. struct 의 public-like 멤버나 자유 함수의 상태 변수에는 적용 안 함.
-| 매크로 | UPPER_SNAKE_CASE | `UNUSED(x)` (가능하면 매크로 회피) |
+### 파일/네임스페이스 스코프
 
-**근거**: libuv 콜백 시그니처(`uv_handle_t* handle`)와 자연스럽게 어울리도록 인자에 `in_`/`out_` 접두사 강제.
+| 구분 | 규칙 | 예시 |
+|------|------|------|
+| 전역 변수 (file-scope, anonymous namespace 포함) | `g_` 접두사 + snake_case | `g_socket`, `g_stdin_is_tty` |
+| file-scope `static` (C-style) | `g_` 접두사 + snake_case (anonymous namespace 권장) | `g_log_level` |
+| 파일 상수 `constexpr` 변수 | `k` 접두사 + PascalCase | `kMaxConns`, `kDefaultHost` |
+| `consteval`/`constexpr` 함수 (상수처럼 호출) | `k` 접두사 + PascalCase + `()` | `kPort()`, `kBacklog()` |
+
+### 타입/클래스 멤버
+
+| 구분 | 규칙 | 예시 |
+|------|------|------|
+| `struct` 데이터 멤버 (POD/DTO 위주) | snake_case, 접두사 없음 | `worker_id`, `live_conns`, `pending` |
+| `class` private/protected 멤버 | snake_case + **trailing `_`** | `worker_count_`, `port_`, `callbacks_` |
+| `class`/`struct` public 데이터 멤버 (외부 노출) | PascalCase | `ClientSocket`, `BufferSize` |
+| static 클래스 멤버 (가변) | `s_` 접두사 + snake_case | `s_instance_count_` (private + trailing) |
+| static 클래스 멤버 (상수) | `k` 접두사 + PascalCase | `kMaxWorkers` |
+
+### 기타
+
+| 구분 | 규칙 | 예시 |
+|------|------|------|
+| 매크로 | UPPER_SNAKE_CASE | `UVX_ASSERT`, `LIKELY` (가능하면 매크로 회피) |
+| Enum 값 (scoped enum) | PascalCase | `EventMask::Read` |
+| Type alias (`using`/`typedef`) | PascalCase | `using WorkerPtr = std::shared_ptr<Worker>;` |
+
+---
+
+### 적용 가이드
+
+**`struct` vs `class` 구분**
+- **`struct`**: 데이터 위주 POD/DTO. 멤버는 snake_case, public 기본, 메서드 적거나 없음.
+  예: `WorkerContext { int worker_id; uv_loop_t loop; ... };`
+- **`class`**: 동작/메서드 위주. private 멤버는 snake_case + trailing `_`, 캡슐화.
+  예: `class MultiReactor { private: int worker_count_; ... };`
+- **판단 기준**: "외부에 데이터를 그대로 노출하는 컨테이너면 struct, 동작/불변식이 있으면 class".
+
+**trailing `_` 사용 시점**
+- `class` 의 private/protected 멤버에만 적용. 생성자 인자 `int port` 와 멤버 `port_` 의 충돌을 피하기 위함.
+- 생성자 init list: `MultiReactor(int port) : port_(port) {}` — 룰 그대로 자연스럽게 작성.
+- `struct` 데이터 멤버에는 적용 안 함 (`worker_id` 그대로).
+
+**`g_` 접두사 사용 시점**
+- 파일 상단 또는 anonymous namespace 안의 변수 (file-scope state) 모두에 적용.
+- anonymous namespace 가 internal linkage 를 보장하더라도, **"함수 밖에 살아있는 상태"** 라는 의미를 강조하기 위해 prefix 유지.
+- 예: `namespace stdin_mode { uv_tcp_t g_socket{}; uv_tty_t g_stdin_tty{}; }`
+
+**`s_` 접두사 사용 시점**
+- function-local `static` 변수 (`static uv_shutdown_t s_shutdown_req;`).
+- class 의 static 가변 멤버 (인스턴스 카운트 등).
+- 상수면 `k` 접두사 우선 (`static constexpr int kMaxConns = 1024;`).
+
+**`k` 접두사 사용 시점**
+- 컴파일 타임 상수 (`constexpr`, `consteval`, `const` integral) 에만.
+- 런타임 `const auto value = ...` 같은 지역 const 는 그냥 snake_case.
+- `kPascalCase` (Google C++ 스타일과 동일).
+
+**`in_`/`out_` 접두사 사용 시점**
+- 모든 함수 인자에 적용 (학습 프로젝트 룰).
+- 콜백 시그니처에 외부 라이브러리 타입이 그대로 들어오면 (`uv_handle_t* handle`) 그건 외부 API 호환이라 예외 — 다만 자체 작성한 helper 의 인자는 `in_handle` 권장.
+- in-out 인자 (입력 + 수정)는 `out_` 사용 (값을 변경한다는 의미가 우선).
+
+**근거**: 함수 본문을 읽을 때 "이 변수가 어디서 왔는지" 한눈에 보임. 예: `port_` → "내가 가진 멤버", `in_port` → "호출자가 넘긴 값", `g_socket` → "함수 밖에 사는 상태", `kDefaultPort` → "컴파일 타임 상수". 접두사 1자로 6가지 출처를 구분.
 
 ---
 
